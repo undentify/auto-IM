@@ -37,7 +37,7 @@ def doc_search(path):
         'fstab': 'UNKNOWN',
         'report': 'UNKNOWN'
     }
-    path=path+'/res'
+    path=path+slash_type+'res'
     print('Поиск документов:', path)
     files = os.listdir(path)
     symbol=slash_type
@@ -576,42 +576,42 @@ if __name__ == '__main__':
         df_spec = prepare_spec(docPath['specification'])
         json_spec = spec_to_json(df_spec)
     else:
-        json_spec = {
+        json_spec = [{
             "cols": {'spec': 'UNKNOWN', 'amount': 'UNKNOWN', 'comment': 'UNKNOWN', 'date': 'UNKNOWN', 'articul': 'UNKNOWN'}
-        }
+        }]
     if docPath['vmlist'] != 'UNKNOWN':
         json_vm = vm_to_json(docPath['vmlist'],userProps['OS_version'])
     else:
-        json_vm = {
+        json_vm = [{
             "cols": {'name': 'UNKNOWN', 'OS': 'UNKNOWN', 'vCPU': 'UNKNOWN', 'RAM': 'UNKNOWN',
                      'space': 'UNKNOWN','diskType': 'UNKNOWN','comment': 'UNKNOWN'}
-        }
+        }]
     if docPath['cablejournal'] != 'UNKNOWN':
         df_cj = prepare_cj(docPath['cablejournal'])
         json_cj = cj_to_json(df_cj)
     else:
-        json_cj = {
+        json_cj = [{
             "cols": {'num': 'UNKNOWN', 's_name': 'UNKNOWN', 's_port': 'UNKNOWN', 'd_name': 'UNKNOWN',
                      'd_port': 'UNKNOWN', 'speed': 'UNKNOWN', 'type': 'UNKNOWN'}
-        }
+        }]
     if docPath['netpassport'] != 'UNKNOWN':
         df_netpassport=prepare_netpassport(docPath['netpassport'])
         json_netpassport = netpassport_to_json(df_netpassport[0],df_netpassport[1],df_netpassport[2])
     else:
         json_netpassport = {
 
-            'srv': {
+            'srv': [{
                 "cols": {'num': 'UNKNOWN', 'name': 'UNKNOWN', 'role': 'UNKNOWN', 'ip_d': 'UNKNOWN',
                          'ip_m': 'UNKNOWN', 'ip_v': 'UNKNOWN', 'date': 'UNKNOWN'}
-            },
-            'sw': {
+            }],
+            'sw': [{
                 "cols": {'num': 'UNKNOWN', 'name': 'UNKNOWN', 'type': 'UNKNOWN',
                          'ip_m': 'UNKNOWN', 'date': 'UNKNOWN'}
-            },
-            'port': {
+            }],
+            'port': [{
                 "cols": {'dc': 'UNKNOWN', 'rack': 'UNKNOWN', 'unit': 'UNKNOWN', 'role': 'UNKNOWN',
                          'name': 'UNKNOWN', 'port': 'UNKNOWN', 'ip': 'UNKNOWN', 'mask': 'UNKNOWN'}
-            },
+            }],
             'vars':
             {
                 'segment_name': 'UNKNOWN',
@@ -630,18 +630,18 @@ if __name__ == '__main__':
         json_disk = lsblk_to_json(json_lsblk, json_netpassport)
     else:
         json_disk = {
-            'Segment': {
+            'Segment': [{
                 "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
                          'mount': 'UNKNOWN'}
-            },
-            'Master': {
+            }],
+            'Master': [{
                 "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
                          'mount': 'UNKNOWN'}
-            },
-            'ADCC': {
+            }],
+            'ADCC': [{
                 "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
                          'mount': 'UNKNOWN'}
-            }
+            }]
         }
     if docPath['fstab'] != 'UNKNOWN':
         json_fstab = fstab_to_json(docPath['fstab'])
@@ -652,10 +652,10 @@ if __name__ == '__main__':
         dictRoles = find_roles_in_netpassport(json_netpassport)
         json_raid = raid_to_json_short(json_raid_full, dictRoles)
     else:
-        json_raid = {
+        json_raid = [{
             "cols": {'num': 'UNKNOWN', 'type': 'UNKNOWN', 'spec': 'UNKNOWN', 'raid': 'UNKNOWN',
-                     'fs': 'UNKNOWN', 'mount': 'UNKNOWN'}
-        }
+                     'mount': 'UNKNOWN', 'params': 'UNKNOWN'}
+        }]
     now = datetime.datetime.now()
 
     # Данные для заполнения шаблона
@@ -692,6 +692,7 @@ if __name__ == '__main__':
 
     # Заполнение шаблона данными
     print('Обработка данных docxtpl')
+    print(context)
     doc.render(context)
 
     # Сохранение документа
