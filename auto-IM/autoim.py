@@ -1,12 +1,68 @@
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 import datetime
 import pandas
 import openpyxl
+import zipfile
+#import aspose.zip
+import py7zr
+from docx.shared import Mm
 import numpy
 import re
 import os
 
 version = '1.0'
+
+def find_arch_type(path='res/precheck  ECO PREPROD.7z'):
+    type=path.split('.')[-1]
+    return type
+
+def list_sz_file(path='res/precheck  ECO PREPROD.7z'):
+    fileList = []
+    with py7zr.SevenZipFile(path, mode='r') as mysz:
+        for item in mysz.getnames():
+            if 'MACOS' in item:
+                pass
+            else:
+                fileList.append(item)
+    #print('7z file list:\n',fileList)
+    return fileList
+
+def list_zip_file(path='res/report_1639 ECO DR.zip'):
+    fileList=[]
+    with zipfile.ZipFile(path, "r") as myzip:
+        for item in myzip.infolist():
+            if 'MACOSX' in item.filename:
+                pass
+            else:
+                if (item.is_dir()):
+                    pass
+                    #print(f"Папка: {item.filename}")
+                else:
+                    fileList.append(item.filename)
+                    #print(f"Файл: {item.filename}")
+    return fileList
+
+def extract_file_from_archive(fileType, archPath, filePath):
+    #print('archPath:', archPath)
+    #print('filePath:', filePath)
+    '''
+    if fileType='7z':
+        filter_pattern = re.compile(filePath)
+        with SevenZipFile(archPath, 'r') as archive:
+            allfiles = archive.getnames()
+            selective_files = [f if filter_pattern.match(f) for f in allfiles]
+            archive.extract(targets=selective_files)
+    '''
+    if fileType == '7z':
+        with py7zr.SevenZipFile(archPath, 'r') as archive:
+            archive.extract(targets=[filePath], path=os.getcwd()+slash_type+'res')
+            archive.reset()
+        pathtofile = os.getcwd()+slash_type+'res'+slash_type+filePath
+    if fileType == 'zip':
+        with zipfile.ZipFile(archPath, 'r') as archive:
+            pathtofile = archive.extract(filePath, path=os.getcwd()+slash_type+'res')
+            #print('zip path:',pathtofile)
+    return pathtofile
 
 
 def read_props(file):
@@ -35,7 +91,11 @@ def doc_search(path):
         'vmlist': 'UNKNOWN',
         'lsblk': 'UNKNOWN',
         'fstab': 'UNKNOWN',
-        'report': 'UNKNOWN'
+        'report': 'UNKNOWN',
+        'razm': 'UNKNOWN',
+        'rack': 'UNKNOWN',
+        'irack': 'UNKNOWN',
+        'L2L3': 'UNKNOWN'
     }
     path=path+slash_type+'res'
     print('Поиск документов:', path)
@@ -59,8 +119,43 @@ def doc_search(path):
                 docPath['lsblk'] = path + symbol + filename
             if 'fstab' in filename.lower():
                 docPath['fstab'] = path + symbol + filename
-            if 'report' in filename.lower():
+            if ('report' in filename.lower()) and ('.zip' or '.7z' in filename.lower()):
                 docPath['report'] = path + symbol + filename
+                fileType = find_arch_type(docPath['report'])
+                print('report filetype is:', fileType)
+                if fileType == '7z':
+                    fileList = list_sz_file(docPath['report'])
+                elif fileType == 'zip':
+                    fileList = list_zip_file(docPath['report'])
+                else:
+                    fileList = []
+                    print('unsupported archive type or archive is missing')
+                #print('report fileList is:', fileList)
+            if 'размещение' in filename.lower():
+                docPath['razm'] = path + symbol + filename
+            if '_irack' in filename.lower():
+                docPath['irack'] = path + symbol + filename
+            if '_rack' in filename.lower():
+                docPath['rack'] = path + symbol + filename
+            if 'l2 l3' in filename.lower():
+                docPath['L2L3'] = path + symbol + filename
+    #поиск недостающего в reprot-e:
+    if docPath['vmlist'] == 'UNKNOWN' and docPath['report'] != 'UNKNOWN':
+        print('finding vmlist in report...')
+        for item in fileList:
+            if 'vm-hw.txt' in item:
+                docPath['vmlist'] = extract_file_from_archive(fileType, docPath['report'], item)
+    if docPath['lsblk'] == 'UNKNOWN' and docPath['report'] != 'UNKNOWN':
+        print('finding lsblk in report...')
+        for item in fileList:
+            if 'lsblk.txt' in item:
+                docPath['lsblk'] = extract_file_from_archive(fileType, docPath['report'], item)
+    if docPath['fstab'] == 'UNKNOWN' and docPath['report'] != 'UNKNOWN':
+        print('finding fstab in report...')
+        for item in fileList:
+            if 'fstab.txt' in item:
+                docPath['fstab'] = extract_file_from_archive(fileType, docPath['report'], item)
+
     print('Сетевой паспорт найден:',docPath['netpassport'])
     print('Кабельный журнал найден:', docPath['cablejournal'])
     print('Спецификация найдена:', docPath['specification'])
@@ -69,6 +164,10 @@ def doc_search(path):
     print('Данные по дисковым подсистемам найдены::', docPath['lsblk'])
     print('Данные по параметрам монтирования найдены:', docPath['fstab'])
     print('Отчет по установке найден:', docPath['report'])
+    print('Схема размещения найдена:', docPath['razm'])
+    print('Схема сетевая структурная найдена:', docPath['irack'])
+    print('Схема физических подключений найдена:', docPath['rack'])
+    print('Схема сетевая логическая:', docPath['L2L3'])
     return docPath
 def prepare_spec(specPath='Спецификация ADB.DR_2586.xlsx'):
     print('Preparing specification:', specPath)
@@ -93,12 +192,13 @@ def prepare_spec(specPath='Спецификация ADB.DR_2586.xlsx'):
             del df_spec[item]
     df_spec=df_spec.drop(labels=[0],axis=0)
     df_spec['amount']=df_spec['amount'].astype(int)
+    #print(df_spec)
     return df_spec
 def spec_to_json(df,date='2024-1'):
     print('preparing JSON for docxtpl for Table1:')
     json_spec = {}
     dict_spec = []
-    for i in range(1,df.shape[0]):
+    for i in range(0,df.shape[0]):
         dict_spec.append({"cols": {'spec': df['spec'].iloc[i],'amount': df['amount'].iloc[i],'comment': df['comment'].iloc[i],'date': date,'articul': ''}})
     json_spec = dict_spec
     return json_spec
@@ -343,7 +443,7 @@ def netpassport_to_json(df_srv, df_sw, df_port):
     json_netpassport_srv = {}
     dict_netpassport_srv = []
     for i in range(0, df_srv.shape[0]):
-        dict_netpassport_srv.append({"cols": {'num': str(i+1), 'name': df_srv['DNS-имя1'].iloc[i], 'role': df_srv['Роль \\ Имя ВМ'].iloc[i],
+        dict_netpassport_srv.append({"cols": {'num': str(i+1), 'name': df_srv['DNS-имя1'].iloc[i].split('.')[0], 'role': df_srv['Роль \\ Имя ВМ'].iloc[i],
                                               'ip_d': df_srv['IP1'].iloc[i], 'ip_m': df_srv['IP2'].iloc[i],'ip_y': df_srv['IP3'].iloc[i], 'date': df_srv['Год и порядковый номер поставки'].iloc[i]}})
     json_netpassport_srv = dict_netpassport_srv
     print('preparing JSON for docxtpl for Table5:')
@@ -356,8 +456,21 @@ def netpassport_to_json(df_srv, df_sw, df_port):
     print('preparing JSON for docxtpl for Table6:')
     json_netpassport_port = {}
     dict_netpassport_port = []
+    portNum = ''
     for i in range(0, df_port.shape[0]):
-        dict_netpassport_port.append({"cols": {'dc': df_port['ЦОД'].iloc[i], 'rack': df_port['Стойка'].iloc[i], 'unit': df_port['Unit'].iloc[i], 'role': df_port['Роль'].iloc[i], 'name': df_port['DNS-имя'].iloc[i], 'port': '', 'ip': df_port['IP'].iloc[i], 'mask': df_port['Маска'].iloc[i]}})
+        if df_port['Роль'].iloc[i] == 'MGMT':
+            portNum = '43'
+        if df_port['Роль'].iloc[i] == 'MGMT' and portNum == '43':
+            portNum = '44'
+        if df_port['Роль'].iloc[i] == 'ACCESS' or df_port['Роль'].iloc[i] == 'ACC':
+            portNum = 'xe33'
+        dict_netpassport_port.append({"cols": {'dc': df_port['ЦОД'].iloc[i],
+                                               'rack': df_port['Зал'].iloc[i]+'-'+df_port['Ряд'].iloc[i]+'-'+str(df_port['Стойка'].iloc[i]),
+                                               'unit': df_port['Unit'].iloc[i],
+                                               'role': df_port['Роль'].iloc[i],
+                                               'name': df_port['DNS-имя'].iloc[i],
+                                               'port': portNum,
+                                               'vlan': int(df_port['VLAN'].iloc[i])}})
     json_netpassport_port = dict_netpassport_port
     df_nets = df_srv.loc[df_srv['Роль \\ Имя ВМ'] == 'Management']
     #print(df_nets)
@@ -426,12 +539,26 @@ def prepare_lsblk(path):
             json_lsblk[hostname].append(splittedLine)
     for host in list(json_lsblk.keys()):
         json_lsblk[host]=pandas.DataFrame(data=json_lsblk[host][1:],columns=json_lsblk[host][0])
+    #print(json_lsblk)
     return json_lsblk
 
 def lsblk_to_json(json_lsblk, json_netpassport):
     print('preparing JSON for docxtpl for Table8+:')
     listRoles= []
-    json_disk = {}
+    json_disk = {
+        'Segment': [{
+            "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
+                     'mount': 'UNKNOWN'}
+        }],
+        'Master': [{
+            "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
+                     'mount': 'UNKNOWN'}
+        }],
+        'ADCC': [{
+            "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
+                     'mount': 'UNKNOWN'}
+        }]
+    }
     for i in range(len(json_netpassport['srv'])):
         if 'xk' not in json_netpassport['srv'][i]['cols']['name']:
             if (json_netpassport['srv'][i]['cols']['role'] != 'Management') and (json_netpassport['srv'][i]['cols']['role'] not in listRoles):
@@ -441,7 +568,7 @@ def lsblk_to_json(json_lsblk, json_netpassport):
         dictRoles[item]=[]
     for i in range(len(json_netpassport['srv'])):
         if ('xk' not in json_netpassport['srv'][i]['cols']['name']) and (json_netpassport['srv'][i]['cols']['role'] != 'Management'):
-            dictRoles[json_netpassport['srv'][i]['cols']['role']].append(json_netpassport['srv'][i]['cols']['name'])
+            dictRoles[json_netpassport['srv'][i]['cols']['role']].append(json_netpassport['srv'][i]['cols']['name'].split('.')[0])
     for type in list(dictRoles.keys()):
         print('Заполнение структуры дисковой подсистемы для',type,'(',dictRoles[type][0],')')
         role = json_lsblk[dictRoles[type][0]]
@@ -564,6 +691,7 @@ if __name__ == '__main__':
     # поиск документов
     docPath = doc_search(os.path.dirname(os.path.abspath(__file__)))
 
+
     # Загрузка шаблона
     if userProps['PAC_type'] == 'МБД.Г':
         doc = DocxTemplate("template_ADB.docx")
@@ -629,20 +757,7 @@ if __name__ == '__main__':
         json_lsblk = prepare_lsblk(docPath['lsblk'])
         json_disk = lsblk_to_json(json_lsblk, json_netpassport)
     else:
-        json_disk = {
-            'Segment': [{
-                "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
-                         'mount': 'UNKNOWN'}
-            }],
-            'Master': [{
-                "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
-                         'mount': 'UNKNOWN'}
-            }],
-            'ADCC': [{
-                "cols": {'name': 'UNKNOWN', 'size': 'UNKNOWN', 'type': 'UNKNOWN',
-                         'mount': 'UNKNOWN'}
-            }]
-        }
+        pass
     if docPath['fstab'] != 'UNKNOWN':
         json_fstab = fstab_to_json(docPath['fstab'])
     else:
@@ -687,12 +802,24 @@ if __name__ == '__main__':
         'tbl7_contents': json_raid,
         'tbl8_contents': json_disk['Segment'],
         'tbl9_contents': json_disk['Master'],
-        'tbl10_contents': json_disk['ADCC']
+        'tbl10_contents': json_disk['ADCC'],
+        #'img1': InlineImage(doc, image_descriptor=docPath['irack'], height=Mm(238)), #height=Mm(238)
+        #'img2': InlineImage(doc, image_descriptor=docPath['L2L3'], height=Mm(238)),
+        #'img3': InlineImage(doc, image_descriptor=docPath['razm'], height=Mm(237)),
+        #'img4': InlineImage(doc, image_descriptor=docPath['rack'], height=Mm(339))
     }
+    if docPath['irack'] != 'UNKNOWN':
+        context.update(dict(img1=InlineImage(doc, image_descriptor=docPath['irack'], height=Mm(238))))
+    if docPath['L2L3'] != 'UNKNOWN':
+        context.update(dict(img2=InlineImage(doc, image_descriptor=docPath['L2L3'], height=Mm(238))))
+    if docPath['razm'] != 'UNKNOWN':
+        context.update(dict(img3=InlineImage(doc, image_descriptor=docPath['razm'], height=Mm(237))))
+    if docPath['rack'] != 'UNKNOWN':
+        context.update(dict(img4=InlineImage(doc, image_descriptor=docPath['rack'], width=Mm(278), height=Mm(339))))
 
     # Заполнение шаблона данными
     print('Обработка данных docxtpl')
-    print(context)
+    print('Resulting Object is:\n',context)
     doc.render(context)
 
     # Сохранение документа
